@@ -1,4 +1,4 @@
-package memory
+package type_
 
 import (
 	"context"
@@ -79,6 +79,32 @@ func (m *WorkingMemory) Add(ctx context.Context, items ...basememory.MemoryItem)
 	}
 
 	m.trimIfNeededLocked()
+	return nil
+}
+
+func (m *WorkingMemory) Update(ctx context.Context, items ...basememory.MemoryItem) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, item := range items {
+		existing, ok := m.items[item.ID]
+		if !ok {
+			return basememory.ErrNotFound
+		}
+		if item.Content != "" {
+			existing.Content = item.Content
+		}
+		if item.Metadata != nil {
+			for k, v := range item.Metadata {
+				existing.Metadata[k] = v
+			}
+		}
+		existing.UpdatedAt = now
+		m.items[item.ID] = existing
+	}
 	return nil
 }
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"xgc-agent/memory"
 	"xgc-agent/memory/store"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -61,6 +63,36 @@ type Neo4jGraphStore struct {
 	driver neo4j.DriverWithContext
 	// options holds the configuration settings for the graph store.
 	options neo4jOptions
+}
+
+func (s *Neo4jGraphStore) Add(ctx context.Context, userID string, content string, topics []string, metadata map[string]any) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *Neo4jGraphStore) Get(ctx context.Context, userID string, memoryID string) (*memory.MemoryItem, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *Neo4jGraphStore) Update(ctx context.Context, userID string, memoryID string, content string, topic []string, metadata map[string]any) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *Neo4jGraphStore) Delete(ctx context.Context, userID string, memoryID string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *Neo4jGraphStore) Clear(ctx context.Context, userID string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *Neo4jGraphStore) List(ctx context.Context, userID string, limit int) ([]*memory.MemoryItem, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 // NewNeo4jGraphStore creates a new Neo4j graph store.
@@ -646,30 +678,4 @@ func checkEntity(userID string, entityID string) error {
 		return ErrEntityIDRequired
 	}
 	return nil
-}
-
-func Add(ctx context.Context, userID string, content string,
-	topics []string, metadata map[string]any) error {
-	return ErrNotImplemented
-}
-
-func Get(ctx context.Context, userID string, query string) ([]string, error) {
-	return nil, ErrNotImplemented
-}
-
-func Update(ctx context.Context, userID string, query string, content string,
-	topics []string, metadata map[string]any) error {
-	return ErrNotImplemented
-}
-
-func Delete(ctx context.Context, userID string, query string) error {
-	return ErrNotImplemented
-}
-
-func Clear(ctx context.Context, userID string) error {
-	return ErrNotImplemented
-}
-
-func List(ctx context.Context, userID string, limit int) ([]string, error) {
-	return nil, ErrNotImplemented
 }

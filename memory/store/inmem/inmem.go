@@ -13,13 +13,13 @@ import (
 // It represents memories manager for a specific app.
 type InMemoryStore struct {
 	mu       sync.RWMutex
-	memories map[string]map[string]*memory.MemoryEntry // userID -> memoryID -> MemoryEntry
+	memories map[string]map[string]*memory.MemoryItem // userID -> memoryID -> MemoryEntry
 	// the manager options
 	options storeOptions
 }
 
 // createMemoryEntry creates a MemoryEntry from the given parameters.
-func createMemoryEntry(userID string, content string, topics []string, metadata map[string]any) *memory.MemoryEntry {
+func createMemoryEntry(userID string, content string, topics []string, metadata map[string]any) *memory.MemoryItem {
 	time := time.Now()
 	memoryObj := &memory.Memory{
 		Content:  content,
@@ -27,7 +27,7 @@ func createMemoryEntry(userID string, content string, topics []string, metadata 
 		Metadata: metadata,
 	}
 
-	return &memory.MemoryEntry{
+	return &memory.MemoryItem{
 		MemoryID:  memory.GenerateMemoryID(memoryObj, userID),
 		Memory:    memoryObj,
 		UserID:    userID,
@@ -46,7 +46,7 @@ func NewInMemoryStore(opts ...StoreOptions) *InMemoryStore {
 	}
 
 	return &InMemoryStore{
-		memories: make(map[string]map[string]*memory.MemoryEntry),
+		memories: make(map[string]map[string]*memory.MemoryItem),
 		options:  options,
 	}
 }
@@ -67,13 +67,13 @@ func (s *InMemoryStore) Add(ctx context.Context, userID string, content string,
 		return errors.New("memory: memory limit exceeded for user " + userID)
 	}
 	if s.memories[userID] == nil {
-		s.memories[userID] = make(map[string]*memory.MemoryEntry)
+		s.memories[userID] = make(map[string]*memory.MemoryItem)
 	}
 	s.memories[userID][memoryEntry.MemoryID] = memoryEntry
 	return nil
 }
 
-func (s *InMemoryStore) Get(ctx context.Context, userID string, memoryID string) (*memory.MemoryEntry, error) {
+func (s *InMemoryStore) Get(ctx context.Context, userID string, memoryID string) (*memory.MemoryItem, error) {
 	if userID == "" {
 		return nil, memory.ErrUserIDRequired
 	}
@@ -161,7 +161,7 @@ func (s *InMemoryStore) Clear(ctx context.Context, userID string) error {
 	return nil
 }
 
-func (s *InMemoryStore) List(ctx context.Context, userID string, limit int) ([]*memory.MemoryEntry, error) {
+func (s *InMemoryStore) List(ctx context.Context, userID string, limit int) ([]*memory.MemoryItem, error) {
 	_ = ctx
 	if userID == "" {
 		return nil, memory.ErrInvalidID
@@ -175,12 +175,12 @@ func (s *InMemoryStore) List(ctx context.Context, userID string, limit int) ([]*
 		return nil, nil
 	}
 
-	var out []*memory.MemoryEntry
+	var out []*memory.MemoryItem
 	// If limit <= 0, return all memories. Otherwise, return up to the limit.
 	if limit <= 0 || len(userMemories) <= limit {
 		limit = len(userMemories)
 	}
-	out = make([]*memory.MemoryEntry, 0, limit)
+	out = make([]*memory.MemoryItem, 0, limit)
 
 	count := 0
 	for _, memory := range userMemories {
@@ -203,6 +203,6 @@ func (s *InMemoryStore) List(ctx context.Context, userID string, limit int) ([]*
 }
 
 // TODO: to implement it
-func (s *InMemoryStore) Search(ctx context.Context, query string, limit int) ([]*memory.MemoryEntry, error) {
+func (s *InMemoryStore) Search(ctx context.Context, query string, limit int) ([]*memory.MemoryItem, error) {
 	return nil, memory.ErrSearchNotSupported
 }

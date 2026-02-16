@@ -1,4 +1,4 @@
-package memory
+package type_
 
 import (
 	"time"

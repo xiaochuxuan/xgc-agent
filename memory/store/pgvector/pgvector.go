@@ -210,7 +210,7 @@ func (s *PgvectorStore) Add(ctx context.Context, userID string, content string,
 	return nil
 }
 
-func (s *PgvectorStore) Get(ctx context.Context, userID string, memoryID string) (*memory.MemoryEntry, error) {
+func (s *PgvectorStore) Get(ctx context.Context, userID string, memoryID string) (*memory.MemoryItem, error) {
 	if userID == "" {
 		return nil, memory.ErrUserIDRequired
 	}
@@ -229,7 +229,7 @@ func (s *PgvectorStore) Get(ctx context.Context, userID string, memoryID string)
 		deletedFilter,
 	)
 
-	var entry *memory.MemoryEntry
+	var entry *memory.MemoryItem
 	err := s.db.Query(ctx, func(rows *sql.Rows) error {
 		if rows.Next() {
 			var scanErr error
@@ -374,7 +374,7 @@ func (s *PgvectorStore) Clear(ctx context.Context, userID string) error {
 	}
 }
 
-func (s *PgvectorStore) List(ctx context.Context, userID string, limit int) ([]*memory.MemoryEntry, error) {
+func (s *PgvectorStore) List(ctx context.Context, userID string, limit int) ([]*memory.MemoryItem, error) {
 	if userID == "" {
 		return nil, memory.ErrUserIDRequired
 	}
@@ -396,7 +396,7 @@ func (s *PgvectorStore) List(ctx context.Context, userID string, limit int) ([]*
 		args = append(args, limit)
 	}
 
-	entries := make([]*memory.MemoryEntry, 0)
+	entries := make([]*memory.MemoryItem, 0)
 	err := s.db.Query(ctx, func(rows *sql.Rows) error {
 		for rows.Next() {
 			entry, err := scanMemoryEntry(rows)
@@ -415,7 +415,7 @@ func (s *PgvectorStore) List(ctx context.Context, userID string, limit int) ([]*
 }
 
 // scanMemoryEntry scans a memory entry from database rows.
-func scanMemoryEntry(rows *sql.Rows) (*memory.MemoryEntry, error) {
+func scanMemoryEntry(rows *sql.Rows) (*memory.MemoryItem, error) {
 	var (
 		memoryID  string
 		userID    string
@@ -437,7 +437,7 @@ func scanMemoryEntry(rows *sql.Rows) (*memory.MemoryEntry, error) {
 		return nil, fmt.Errorf("unmarshal metadata failed: %w", err)
 	}
 
-	return &memory.MemoryEntry{
+	return &memory.MemoryItem{
 		MemoryID: memoryID,
 		UserID:   userID,
 		Memory: &memory.Memory{
