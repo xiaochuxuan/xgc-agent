@@ -7,7 +7,9 @@ import (
 	"sync"
 )
 
-var defaultMaxTools = 100
+const (
+	DefaultMaxTools = 100
+)
 
 // Registry provides unified tool management with a registration mechanism.
 type Registry struct {
@@ -19,7 +21,7 @@ type Registry struct {
 // NewRegistry creates a new tool registry.
 func NewRegistry(maxTools int) *Registry {
 	if maxTools <= 0 {
-		maxTools = defaultMaxTools
+		maxTools = DefaultMaxTools
 	}
 	return &Registry{
 		tools:    make(map[string]BaseTool),
@@ -120,7 +122,7 @@ func (r *Registry) Schemas() []ToolSchema {
 }
 
 // DefaultRegistry is the global registry for tools.
-var DefaultRegistry = NewRegistry(defaultMaxTools)
+var DefaultRegistry = NewRegistry(DefaultMaxTools)
 
 // Register registers a tool in the default registry.
 func Register(t BaseTool) error { return DefaultRegistry.Register(t) }

@@ -24,6 +24,7 @@ const (
 	NodeFailed
 )
 
+// TODO: to support multiple Scheduler instances running in parallel
 type Scheduler struct {
 	// Graph represents the execution graph where keys are node ids and values are pointers to Node structs.
 	Graph map[int32]*Node

@@ -4,7 +4,7 @@ import "xgc-agent/tools"
 
 // ChatRequest is a provider-agnostic request.
 type Request struct {
-	Messages []Messages `json:"messages"`
+	Messages []Message `json:"messages"`
 	GenerationConfig
 	// Tools lists available tools for the model to call.
 	Tools map[string]tools.BaseTool `json:"tools,omitempty"`

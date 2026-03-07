@@ -27,7 +27,7 @@ type ResponseChoice struct {
 	// Index is the index of the choice.
 	Index int `json:"index"`
 	// Message is the generated message for this choice.
-	Message Messages `json:"message,omitempty"`
+	Message Message `json:"message,omitempty"`
 	// FinishReason indicates why the generation finished.
 	FinishReason *string `json:"finish_reason,omitempty"`
 }

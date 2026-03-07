@@ -66,7 +66,7 @@ func main() {
 	defer cancel()
 
 	request := &message.Request{
-		Messages: []message.Messages{
+		Messages: []message.Message{
 			message.MessageSystem("你是一个简洁的中文助手。"),
 			message.MessageUser("用一句话介绍 Go 协程的优势。"),
 		},

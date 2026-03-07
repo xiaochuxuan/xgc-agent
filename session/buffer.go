@@ -1,30 +1,30 @@
-package memory
+package session
 
 import (
 	"strings"
 	"sync"
-	"xgc-agent/v2/message"
+	"xgc-agent/message"
 )
 
-// BufferMemory manages a sliding window of messages within a token budget.
+// Buffer manages a sliding window of messages within a token budget.
 // It is actually a message queue (FIFO + token trim)
-type BufferMemory struct {
+type Buffer struct {
 	mu        sync.RWMutex
-	messages  []message.Messages
+	messages  []message.Message
 	maxTokens int
 	tokenizer func(string) int
 }
 
-// NewBufferMemory creates a new BufferMemory with the specified token limit and tokenizer function.
-func NewBufferMemory(maxTokens int, tokenizer func(string) int) *BufferMemory {
+// NewBuffer creates a new BufferMemory with the specified token limit and tokenizer function.
+func NewBuffer(maxTokens int, tokenizer func(string) int) *Buffer {
 	if tokenizer == nil {
 		tokenizer = defaultTokenizer
 	}
-	return &BufferMemory{maxTokens: maxTokens, tokenizer: tokenizer}
+	return &Buffer{maxTokens: maxTokens, tokenizer: tokenizer}
 }
 
 // Append adds new messages to the buffer and trims old messages if the token limit is exceeded.
-func (b *BufferMemory) Append(msg message.Messages) {
+func (b *Buffer) Append(msg message.Message) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.messages = append(b.messages, msg)
@@ -32,16 +32,16 @@ func (b *BufferMemory) Append(msg message.Messages) {
 }
 
 // Messages returns a copy of the current messages in the buffer.
-func (b *BufferMemory) Messages() []message.Messages {
+func (b *Buffer) Messages() []message.Message {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	out := make([]message.Messages, len(b.messages))
+	out := make([]message.Message, len(b.messages))
 	copy(out, b.messages)
 	return out
 }
 
 // TokenCount returns the total token count of all messages in the buffer.
-func (b *BufferMemory) TokenCount() int {
+func (b *Buffer) TokenCount() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	total := 0
@@ -51,21 +51,28 @@ func (b *BufferMemory) TokenCount() int {
 	return total
 }
 
+// MaxTokens returns the configured token budget of the buffer.
+func (b *Buffer) MaxTokens() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.maxTokens
+}
+
 // Clear removes all messages from the buffer.
-func (b *BufferMemory) Clear() {
+func (b *Buffer) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.messages = nil
 }
 
 // trim removes oldest messages until the total token count is within the limit.
-func (b *BufferMemory) trim() {
+func (b *Buffer) trim() {
 	for b.tokenCount() > b.maxTokens && len(b.messages) > 1 {
 		b.messages = b.messages[1:]
 	}
 }
 
-func (b *BufferMemory) tokenCount() int {
+func (b *Buffer) tokenCount() int {
 	total := 0
 	for _, m := range b.messages {
 		total += b.tokenizer(m.Content)

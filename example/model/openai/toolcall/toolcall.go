@@ -67,36 +67,36 @@ type toolRuntime struct {
 	tools map[string]tools.BaseTool
 }
 
-func (rt toolRuntime) executeToolCall(ctx context.Context, tc message.ToolCall) (message.Messages, error) {
+func (rt toolRuntime) executeToolCall(ctx context.Context, tc message.ToolCall) (message.Message, error) {
 	t, ok := rt.tools[tc.ToolDefinition.Name]
 	if !ok {
-		return message.Messages{}, fmt.Errorf("tool not found: %s", tc.ToolDefinition.Name)
+		return message.Message{}, fmt.Errorf("tool not found: %s", tc.ToolDefinition.Name)
 	}
 
 	switch t.Type() {
 	case tools.ToolTypeNonStreaming:
 		tool, err := tools.AsNonStreamingTool(t)
 		if err != nil {
-			return message.Messages{}, err
+			return message.Message{}, err
 		}
 		out, err := tool.Execute(ctx, tc.ToolDefinition.Parameters)
 		if err != nil {
-			return message.Messages{}, err
+			return message.Message{}, err
 		}
 		b, err := json.Marshal(out)
 		if err != nil {
-			return message.Messages{}, err
+			return message.Message{}, err
 		}
 		return message.MessageTool(tc.ID, t.Name(), string(b)), nil
 
 	case tools.ToolTypeStreaming:
 		st, err := tools.AsStreamingTool(t)
 		if err != nil {
-			return message.Messages{}, err
+			return message.Message{}, err
 		}
 		reader, err := st.StreamExecute(ctx, tc.ToolDefinition.Parameters)
 		if err != nil {
-			return message.Messages{}, err
+			return message.Message{}, err
 		}
 		defer reader.Close()
 
@@ -108,22 +108,22 @@ func (rt toolRuntime) executeToolCall(ctx context.Context, tc message.ToolCall) 
 				break
 			}
 			if err != nil {
-				return message.Messages{}, err
+				return message.Message{}, err
 			}
 			items = append(items, chunk.Data)
 		}
 		b, err := json.Marshal(map[string]any{"chunks": items})
 		if err != nil {
-			return message.Messages{}, err
+			return message.Message{}, err
 		}
 		return message.MessageTool(tc.ID, t.Name(), string(b)), nil
 	default:
-		return message.Messages{}, fmt.Errorf("unsupported tool type: %v", t.Type())
+		return message.Message{}, fmt.Errorf("unsupported tool type: %v", t.Type())
 	}
 }
 
-func (rt toolRuntime) executeToolCalls(ctx context.Context, assistant message.Messages) ([]message.Messages, error) {
-	out := make([]message.Messages, 0, len(assistant.ToolCalls))
+func (rt toolRuntime) executeToolCalls(ctx context.Context, assistant message.Message) ([]message.Message, error) {
+	out := make([]message.Message, 0, len(assistant.ToolCalls))
 	for _, tc := range assistant.ToolCalls {
 		m, err := rt.executeToolCall(ctx, tc)
 		if err != nil {
@@ -134,7 +134,7 @@ func (rt toolRuntime) executeToolCalls(ctx context.Context, assistant message.Me
 	return out, nil
 }
 
-func runNonStreamingModel(ctx context.Context, m *openai.OpenAIChatModel, msgs []message.Messages, toolMap map[string]tools.BaseTool, maxTurns int) error {
+func runNonStreamingModel(ctx context.Context, m *openai.OpenAIChatModel, msgs []message.Message, toolMap map[string]tools.BaseTool, maxTurns int) error {
 	rt := toolRuntime{tools: toolMap}
 	if maxTurns < 2 {
 		// One tool-call round usually needs at least 2 model calls:
@@ -192,7 +192,7 @@ func runNonStreamingModel(ctx context.Context, m *openai.OpenAIChatModel, msgs [
 	return fmt.Errorf("exceeded maxTurns=%d", maxTurns)
 }
 
-func runStreamingModel(ctx context.Context, m *openai.OpenAIChatModel, msgs []message.Messages, toolMap map[string]tools.BaseTool, maxTurns int) error {
+func runStreamingModel(ctx context.Context, m *openai.OpenAIChatModel, msgs []message.Message, toolMap map[string]tools.BaseTool, maxTurns int) error {
 	rt := toolRuntime{tools: toolMap}
 	if maxTurns < 2 {
 		// Same reason as non-streaming: tool_calls usually require a follow-up model call.
@@ -322,7 +322,7 @@ func main() {
 	fmt.Println("\n== Scenario 1: non-stream model + non-stream tool ==")
 	addTool := newAddTool()
 	tools1 := map[string]tools.BaseTool{addTool.Name(): addTool}
-	msgs1 := []message.Messages{
+	msgs1 := []message.Message{
 		message.MessageSystem("你是一个严谨的助手。遇到计算问题必须调用工具。"),
 		message.MessageUser("请使用 add 工具计算 13 + 29，并只回复结果。"),
 	}
@@ -336,7 +336,7 @@ func main() {
 	fmt.Println("\n== Scenario 2: non-stream model + stream tool ==")
 	counterTool := newCounterStreamTool()
 	tools2 := map[string]tools.BaseTool{counterTool.Name(): counterTool}
-	msgs2 := []message.Messages{
+	msgs2 := []message.Message{
 		message.MessageSystem("你是一个严谨的助手。必须调用工具获取数据。"),
 		message.MessageUser("请调用 counter 工具，参数 n=5。工具会返回从 1 到 n 的流式结果。请根据工具结果告诉我最后一个数字是多少。"),
 	}
@@ -350,7 +350,7 @@ func main() {
 	fmt.Println("\n== Scenario 3: stream model + non-stream tool ==")
 	addTool2 := newAddTool()
 	tools3 := map[string]tools.BaseTool{addTool2.Name(): addTool2}
-	msgs3 := []message.Messages{
+	msgs3 := []message.Message{
 		message.MessageSystem("你是一个严谨的助手。遇到计算问题必须调用工具。"),
 		message.MessageUser("请使用 add 工具计算 7 + 8，并解释一下结果。"),
 	}
@@ -364,7 +364,7 @@ func main() {
 	fmt.Println("\n== Scenario 4: stream model + stream tool ==")
 	counterTool2 := newCounterStreamTool()
 	tools4 := map[string]tools.BaseTool{counterTool2.Name(): counterTool2}
-	msgs4 := []message.Messages{
+	msgs4 := []message.Message{
 		message.MessageSystem("你是一个严谨的助手。必须调用工具获取数据。"),
 		message.MessageUser("请调用 counter 工具，参数 n=3。根据工具返回的流式 chunks，总结一下返回了哪些数字。"),
 	}

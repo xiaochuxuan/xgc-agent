@@ -94,7 +94,7 @@ func TestOpenAIChatModel_Generater(t *testing.T) {
 	m := newTestModel(t, server.URL)
 
 	req := &message.Request{
-		Messages: []message.Messages{message.MessageUser("hi")},
+		Messages: []message.Message{message.MessageUser("hi")},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -158,7 +158,7 @@ func TestOpenAIChatModel_Stream(t *testing.T) {
 	m := newTestModel(t, server.URL)
 
 	req := &message.Request{
-		Messages: []message.Messages{message.MessageUser("hi")},
+		Messages: []message.Message{message.MessageUser("hi")},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -349,7 +349,7 @@ func TestOpenAIChatModel_ToolCallRoundTrip(t *testing.T) {
 
 	// 1) Ask the model a question with tools available.
 	req1 := &message.Request{
-		Messages: []message.Messages{message.MessageUser("what is 1+2?")},
+		Messages: []message.Message{message.MessageUser("what is 1+2?")},
 		Tools:    toolsMap,
 	}
 
@@ -391,7 +391,7 @@ func TestOpenAIChatModel_ToolCallRoundTrip(t *testing.T) {
 	}
 
 	// 3) Send the tool result back to the model.
-	assistantToolCallMsg := message.Messages{
+	assistantToolCallMsg := message.Message{
 		Role:      message.RoleAssistant,
 		Content:   "",
 		ToolCalls: []message.ToolCall{tc},
@@ -399,7 +399,7 @@ func TestOpenAIChatModel_ToolCallRoundTrip(t *testing.T) {
 	toolResultMsg := message.MessageTool(tc.ID, tc.ToolDefinition.Name, string(bytes.TrimSpace(outJSON)))
 
 	req2 := &message.Request{
-		Messages: []message.Messages{
+		Messages: []message.Message{
 			message.MessageUser("what is 1+2?"),
 			assistantToolCallMsg,
 			toolResultMsg,

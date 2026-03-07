@@ -74,7 +74,7 @@ func (m *OpenAIChatModel) genRequest(
 	}(), opts...)
 
 	req := &message.Request{
-		Messages: []message.Messages{
+		Messages: []message.Message{
 			{
 				Role:    role,
 				Content: msg,
@@ -164,7 +164,7 @@ func (m *OpenAIChatModel) convertContentPart(part message.ContentPart) (*openai.
 }
 
 // convertUserMessageContent converts message content to user message content union.
-func (m *OpenAIChatModel) convertUserMessageContent(msg message.Messages,
+func (m *OpenAIChatModel) convertUserMessageContent(msg message.Message,
 ) openai.ChatCompletionUserMessageParamContentUnion {
 	// If there are no content parts and Content is not empty, return as string.
 	if len(msg.ContentParts) == 0 && msg.Content != "" {
@@ -202,7 +202,7 @@ func (m *OpenAIChatModel) convertUserMessageContent(msg message.Messages,
 
 // convertSystemMessageContent converts message content to system message content union.
 // the core logic is to convert our ContentParts to OpenAI's content parts.
-func (m *OpenAIChatModel) convertSystemMessageContent(msg message.Messages) openai.ChatCompletionSystemMessageParamContentUnion {
+func (m *OpenAIChatModel) convertSystemMessageContent(msg message.Message) openai.ChatCompletionSystemMessageParamContentUnion {
 	if len(msg.ContentParts) == 0 && msg.Content != "" {
 		return openai.ChatCompletionSystemMessageParamContentUnion{
 			OfString: openai.String(msg.Content),
@@ -228,7 +228,7 @@ func (m *OpenAIChatModel) convertSystemMessageContent(msg message.Messages) open
 }
 
 // convertAssistantMessageContent converts message content to assistant message content union.
-func (m *OpenAIChatModel) convertAssistantMessageContent(msg message.Messages,
+func (m *OpenAIChatModel) convertAssistantMessageContent(msg message.Message,
 ) openai.ChatCompletionAssistantMessageParamContentUnion {
 	if len(msg.ContentParts) == 0 && msg.Content != "" {
 		return openai.ChatCompletionAssistantMessageParamContentUnion{
@@ -278,7 +278,7 @@ func (m *OpenAIChatModel) convertToolCalls(toolCalls []message.ToolCall,
 }
 
 // convertMessages converts our Message format to OpenAI's format.
-func (m *OpenAIChatModel) ConvertToOpenAIMessages(messages []message.Messages) []openai.ChatCompletionMessageParamUnion {
+func (m *OpenAIChatModel) ConvertToOpenAIMessages(messages []message.Message) []openai.ChatCompletionMessageParamUnion {
 	result := make([]openai.ChatCompletionMessageParamUnion, len(messages))
 
 	for i, msg := range messages {
@@ -501,7 +501,7 @@ func (m *OpenAIChatModel) Generater(
 	for i, choice := range chatCompletion.Choices {
 		response.ResponseChoices[i] = message.ResponseChoice{
 			Index: i,
-			Message: message.Messages{
+			Message: message.Message{
 				Role:    message.RoleAssistant,
 				Content: choice.Message.Content,
 			},
@@ -558,7 +558,7 @@ func (m *OpenAIChatModel) createPartialResponse(chunk openai.ChatCompletionChunk
 			if response.ResponseChoices[i].Message.Content == "" {
 				response.ResponseChoices[i] = message.ResponseChoice{
 					Index: i,
-					Message: message.Messages{
+					Message: message.Message{
 						Role:    message.RoleAssistant,
 						Content: choice.Delta.Content,
 					},
@@ -712,7 +712,7 @@ func (m *OpenAIChatModel) Stream(
 
 					finalResponse.ResponseChoices[i] = message.ResponseChoice{
 						Index: choiceIndex,
-						Message: message.Messages{
+						Message: message.Message{
 							Role:    message.RoleAssistant,
 							Content: choice.Message.Content,
 							// generate tool calls for each choice
