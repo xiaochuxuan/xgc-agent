@@ -51,13 +51,6 @@ func (b *Buffer) TokenCount() int {
 	return total
 }
 
-// MaxTokens returns the configured token budget of the buffer.
-func (b *Buffer) MaxTokens() int {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.maxTokens
-}
-
 // Clear removes all messages from the buffer.
 func (b *Buffer) Clear() {
 	b.mu.Lock()
@@ -86,4 +79,9 @@ func defaultTokenizer(s string) int {
 		return 0
 	}
 	return len(strings.Fields(s)) + len(s)/4
+}
+
+// MaxTokens returns the configured token limit.
+func (b *Buffer) MaxTokens() int {
+	return b.maxTokens
 }

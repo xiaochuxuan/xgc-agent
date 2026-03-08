@@ -2,39 +2,31 @@ package type_
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 	"xgc-agent/memory"
 	"xgc-agent/memory/store"
 )
 
-// ShortTermMemory implements ShortTermMemory with TTL auto-expiry and
+// ShortTermMemory implements BaseShortTermMemory with TTL auto-expiry and
 // sliding-window capacity limits. It delegates actual storage to an
-// injected BaseMemory backend (typically inmem.InMemoryStore), while
-// adding TTL assignment, capacity trimming, insertion ordering, and
-// session tagging on top.
+// injected StoreManager backend, while adding TTL assignment, capacity
+// trimming, insertion ordering, and session tagging on top.
 type ShortTermMemory struct {
 	mu        sync.RWMutex
 	userID    string
 	sessionID string
 	ttl       time.Duration
 	capacity  int
-	store     store.StoreManager // underlying storage backend
-	order     *idRing            // insertion-order IDs (ring buffer)
+	store     store.StoreManager
+	order     *idRing
 }
 
-// NewShortTermMemory creates a ShortTermMemory bound to the given session.
-// The store parameter is the underlying storage backend (xgc-agent/memory/store).
-// If store is nil, an error is returned.
-//
-//   - ttl:      how long each item stays alive (0 = no expiry).
-//   - capacity: max number of items before oldest is evicted (0 = unlimited).
-func NewShortTermMemory(userID, sessionID string, ttl time.Duration, capacity int, store store.StoreManager) (*ShortTermMemory, error) {
+func NewShortTermMemory(userID, sessionID string, ttl time.Duration, capacity int, s store.StoreManager) (*ShortTermMemory, error) {
 	if sessionID == "" {
 		return nil, memory.ErrInvalidSessionID
 	}
-	if store == nil {
+	if s == nil {
 		return nil, memory.ErrStoreManagerNil
 	}
 	return &ShortTermMemory{
@@ -42,15 +34,13 @@ func NewShortTermMemory(userID, sessionID string, ttl time.Duration, capacity in
 		sessionID: sessionID,
 		ttl:       ttl,
 		capacity:  capacity,
-		store:     store,
+		store:     s,
 		order:     newIDRing(capacity),
 	}, nil
 }
 
-// Store returns the underlying storage backend.
 func (m *ShortTermMemory) Store() store.StoreManager { return m.store }
-
-func (m *ShortTermMemory) SessionID() string { return m.sessionID }
+func (m *ShortTermMemory) SessionID() string         { return m.sessionID }
 
 func (m *ShortTermMemory) Len() int {
 	m.mu.RLock()
@@ -61,32 +51,17 @@ func (m *ShortTermMemory) Len() int {
 	return m.order.Len()
 }
 
-// Add inserts items, assigns IDs/TTL/type, and evicts the oldest when over
-// capacity. Items are stored in the underlying store backend.
-// the below fields need to be set by the caller:
-//   - MemoryID: required, if empty, it will be auto-generated
-//   - Content: required
-//   - Metadata: optional, session_id will be added automatically
-//
-// The below fields will be set by this method:
-//   - Type: set to MemoryShortTerm
-//   - CreatedAt: set to now if zero
-//   - UpdatedAt: set to now
-//   - ExpiresAt: set to now+ttl if ttl > 0 and ExpiresAt is nil
 func (m *ShortTermMemory) Add(ctx context.Context, items ...memory.MemoryItem) error {
 	now := time.Now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// cleanup expired items first to free up space
 	m.cleanupExpiredLocked(ctx, now)
 
-	// standardize and prepare items for storage, while maintaining insertion order
-	prepared := make([]memory.MemoryItem, 0, len(items))
-	for idx, item := range items {
+	for _, item := range items {
 		it := item.Clone()
 		if it.MemoryID == "" {
-			it.MemoryID = memory.GenerateMemoryID(item.Memory, item.UserID)
+			it.MemoryID = memory.GenerateMemoryID(it.Memory, it.UserID)
 		}
 		it.Type = memory.MemoryShortTerm
 		if it.CreatedAt.IsZero() {
@@ -97,69 +72,59 @@ func (m *ShortTermMemory) Add(ctx context.Context, items ...memory.MemoryItem) e
 			exp := now.Add(m.ttl)
 			it.ExpiresAt = &exp
 		}
-		if it.Metadata == nil {
-			it.Metadata = map[string]any{}
+		if it.Memory != nil {
+			if it.Memory.Metadata == nil {
+				it.Memory.Metadata = map[string]any{}
+			}
+			it.Memory.Metadata["session_id"] = m.sessionID
 		}
-		it.Metadata["session_id"] = m.sessionID
-		if !m.orderContains(it.ID) {
-			m.order.PushBack(it.ID)
+		if !m.order.Contains(it.MemoryID) {
+			m.order.PushBack(it.MemoryID)
 		}
-		prepared = append(prepared, it)
-	}
-	// delegate storage to the backend
-	if err := m.store.Add(ctx, prepared...); err != nil {
-		return err
+		if err := m.store.Add(ctx, it); err != nil {
+			return err
+		}
 	}
 	m.trimLocked(ctx)
 	return nil
 }
 
-func (m *ShortTermMemory) Update(ctx context.Context, items ...MemoryItem) error {
+func (m *ShortTermMemory) Update(ctx context.Context, items ...memory.MemoryItem) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	now := time.Now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, item := range items {
-		existing, err := m.store.Get(ctx, item.ID)
-		if err != nil {
-			return ErrNotFound
+		if item.Memory == nil {
+			continue
 		}
-		if item.Content != "" {
-			existing.Content = item.Content
-		}
-		if item.Metadata != nil {
-			if existing.Metadata == nil {
-				existing.Metadata = make(map[string]any)
-			}
-			for k, v := range item.Metadata {
-				existing.Metadata[k] = v
-			}
-		}
-		existing.UpdatedAt = now
-		if err := m.store.Update(ctx, existing); err != nil {
+		if err := m.store.Update(ctx, m.userID, item.MemoryID, item.Memory.Content, item.Memory.Topics, item.Memory.Metadata); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (m *ShortTermMemory) Get(ctx context.Context, id string) (MemoryItem, error) {
+func (m *ShortTermMemory) Get(ctx context.Context, id string) (memory.MemoryItem, error) {
 	if err := ctx.Err(); err != nil {
-		return MemoryItem{}, err
+		return memory.MemoryItem{}, err
 	}
 	if id == "" {
-		return MemoryItem{}, ErrInvalidID
+		return memory.MemoryItem{}, memory.ErrInvalidID
 	}
 	now := time.Now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cleanupExpiredLocked(ctx, now)
-	return m.store.Get(ctx, id)
+	item, err := m.store.Get(ctx, m.userID, id)
+	if err != nil {
+		return memory.MemoryItem{}, err
+	}
+	return *item, nil
 }
 
-func (m *ShortTermMemory) List(ctx context.Context, opts ListOptions) ([]MemoryItem, error) {
+func (m *ShortTermMemory) List(ctx context.Context, opts memory.ListOptions) ([]memory.MemoryItem, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -167,10 +132,10 @@ func (m *ShortTermMemory) List(ctx context.Context, opts ListOptions) ([]MemoryI
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cleanupExpiredLocked(ctx, now)
-	// iterate in insertion order for deterministic results
-	out := make([]MemoryItem, 0, m.order.Len())
+
+	out := make([]memory.MemoryItem, 0, m.order.Len())
 	for _, id := range m.order.Values() {
-		item, err := m.store.Get(ctx, id)
+		item, err := m.store.Get(ctx, m.userID, id)
 		if err != nil {
 			continue
 		}
@@ -181,9 +146,6 @@ func (m *ShortTermMemory) List(ctx context.Context, opts ListOptions) ([]MemoryI
 			continue
 		}
 		if opts.Until != nil && item.CreatedAt.After(*opts.Until) {
-			continue
-		}
-		if opts.Type != "" && item.Type != opts.Type {
 			continue
 		}
 		out = append(out, item.Clone())
@@ -199,14 +161,14 @@ func (m *ShortTermMemory) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	if id == "" {
-		return ErrInvalidID
+		return memory.ErrInvalidID
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.store.Delete(ctx, id); err != nil {
+	if err := m.store.Delete(ctx, m.userID, id); err != nil {
 		return err
 	}
-	m.removeOrderLocked(id)
+	m.order.Remove(id)
 	return nil
 }
 
@@ -216,21 +178,21 @@ func (m *ShortTermMemory) Clear(ctx context.Context) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := m.store.Clear(ctx); err != nil {
+	if err := m.store.Clear(ctx, m.userID); err != nil {
 		return err
 	}
 	m.order.Reset()
 	return nil
 }
 
-// Snapshot returns all live items in creation order (oldest first).
-func (m *ShortTermMemory) Snapshot(ctx context.Context) ([]MemoryItem, error) {
-	return m.List(ctx, ListOptions{IncludeExpired: false})
+func (m *ShortTermMemory) Search(ctx context.Context, query string, limit int) ([]memory.MemoryItem, error) {
+	return nil, memory.ErrSearchNotSupported
 }
 
-// ---- internal helpers ----
+func (m *ShortTermMemory) Snapshot(ctx context.Context) ([]memory.MemoryItem, error) {
+	return m.List(ctx, memory.ListOptions{IncludeExpired: false})
+}
 
-// cleanupExpiredLocked removes expired items from the store and order list.
 func (m *ShortTermMemory) cleanupExpiredLocked(ctx context.Context, now time.Time) {
 	var expired []string
 	for _, memId := range m.order.Values() {
@@ -245,7 +207,7 @@ func (m *ShortTermMemory) cleanupExpiredLocked(ctx context.Context, now time.Tim
 	}
 	for _, id := range expired {
 		_ = m.store.Delete(ctx, m.userID, id)
-		m.removeOrderLocked(id)
+		m.order.Remove(id)
 	}
 }
 
@@ -262,16 +224,4 @@ func (m *ShortTermMemory) trimLocked(ctx context.Context) {
 	}
 }
 
-func (m *ShortTermMemory) orderContains(id string) bool {
-	if id == "" {
-		return false
-	}
-	return m.order.Contains(id)
-}
-
-func (m *ShortTermMemory) removeOrderLocked(id string) {
-	m.order.Remove(id)
-}
-
-// compile-time checks
-var _ ShortTermMemory = (*ShortTermMemory)(nil)
+var _ BaseShortTermMemory = (*ShortTermMemory)(nil)
