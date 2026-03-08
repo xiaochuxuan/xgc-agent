@@ -17,7 +17,7 @@ type TestOutput struct {
 }
 
 func TestRegistry_RegisterGetListCountSchemas_AndConversions(t *testing.T) {
-	r := NewRegistry(defaultMaxTools)
+	r := NewRegistry(DefaultMaxTools)
 
 	// Two non-streaming tools, with names intentionally out of order.
 	toolB := NewTool(func(ctx context.Context, in struct {
@@ -159,7 +159,7 @@ func TestRegistry_RegisterGetListCountSchemas_AndConversions(t *testing.T) {
 }
 
 func TestRegistry_RegisterAndUnregister_Errors(t *testing.T) {
-	r := NewRegistry(defaultMaxTools)
+	r := NewRegistry(DefaultMaxTools)
 
 	if err := r.Register(nil); !errors.Is(err, ErrNilTool) {
 		t.Fatalf("Register(nil) err=%v, want ErrNilTool", err)

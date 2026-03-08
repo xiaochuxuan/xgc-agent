@@ -13,6 +13,8 @@ const (
 	ToolTypeNonStreaming ToolType = iota
 	// ToolTypeStreaming represents a streaming tool.
 	ToolTypeStreaming
+	// ToolTypeMCP represents a tool that wraps an MCP server tool.
+	ToolTypeMCP
 )
 
 // BaseTool is an interface for tools that can be used by the agent.

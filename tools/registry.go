@@ -167,3 +167,10 @@ func AsStreamingTool(t BaseTool) (StreamingTool, error) {
 	}
 	return t.(StreamingTool), nil
 }
+
+func AsMCPTool(t BaseTool) (*MCPToolCli, error) {
+	if t.Type() != ToolTypeMCP {
+		return nil, fmt.Errorf("tools: tool %s is not an MCP tool", t.Name())
+	}
+	return t.(*MCPToolCli), nil
+}
