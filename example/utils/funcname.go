@@ -6,6 +6,8 @@ import (
 	"xgc-agent/utils"
 )
 
+func main() { functionNameExample() }
+
 func functionNameExample() {
 	name, err := utils.FunctionName(functionNameExample)
 	if err != nil {
