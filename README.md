@@ -1,1 +1,51 @@
-见[feat/init](https://github.com/xiaochuxuan/xgc-agent/tree/feat/init)分支
+## 项目说明
+一个用 Go 构建的可编排模块化 Agent 框架，面向编程助手、工具编排和可扩展智能体场景。项目把模型调用、工具系统、存储能力、多层记忆、RAG 检索、工作流编排、会话管理和安全沙箱拆成独立模块，通过接口解耦，方便按需组合。
+## 整体架构
+
+```text
++--------------------------------------------------------------+
+| 上层：Session / Agent / Sandbox                              |
+| - Session：会话上下文、历史缓冲、状态装配                    |
+| - Agent：ReAct / Plan-and-Execute / Tool-Only / CoT          |
+| - Sandbox：面向工具执行的安全边界与策略控制                 |
++--------------------------------------------------------------+
+                           |
+                           v
++--------------------------------------------------------------+
+| 中层：Memory / RAG / Orchestration                           |
+| - Memory：短期记忆、摘要晋升、长期记忆检索                   |
+| - RAG：分块、Embedding、召回、上下文注入                     |
+| - Orchestration：DAG 调度、条件分支、子图、状态恢复          |
++--------------------------------------------------------------+
+                           |
+                           v
++--------------------------------------------------------------+
+| 底层：Model / Tools / Storage                                |
+| - Model：统一模型抽象与 OpenAI / Mock 适配                   |
+| - Tools：本地工具、流式工具、MCP 工具、Schema 注册           |
+| - Storage：SessionStore、MemoryStore、KV/Vector/Graph 后端   |
++--------------------------------------------------------------+
+```
+
+## 目录说明
+
+```text
+agent/        上层 Agent 与多种推理范式
+embedding/    中层向量化抽象与实现
+memory/       中层多层记忆、管理器与存储
+message/      统一消息协议
+model/        底层模型抽象与适配器
+prompt/       协议层提示词模板与构建器
+rag/          中层检索增强生成管道
+sandbox/      上层安全执行沙箱
+schedule/     中层 DAG 调度与状态恢复
+session/      上层会话、历史缓冲与持久化
+tools/        底层工具接口、注册表、MCP、内置工具
+example/      示例代码与辅助工具
+```
+
+## 当前实现状态
+完成绝大部分核心功能模块，部分仍在迭代优化中
+
+## 补充说明
+模型层OpenAI适配器实现和工具系统部分实现参考了 [trpc-agent-go](https://github.com/trpc-group/trpc-agent-go)
