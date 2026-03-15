@@ -14,7 +14,7 @@ type BaseModel interface {
 	// Stream performs a streaming generation.
 	// The returned event channel is closed when the stream ends.
 	// If an error occurs mid-stream, it is sent on the error channel.
-	Stream(ctx context.Context, req *message.Request, opts ...BaseOption) (<-chan message.StreamEvent, <-chan error)
+	Stream(ctx context.Context, req *message.Request, opts ...BaseOption) (<-chan *message.Response, <-chan error)
 }
 
 type ChatModel interface {
