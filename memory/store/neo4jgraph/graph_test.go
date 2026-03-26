@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"xgc-agent/memory"
 	"xgc-agent/tools"
 )
 
@@ -319,5 +320,23 @@ func TestNeo4jGraphStorePackageLevelNotImplementedFunctions(t *testing.T) {
 
 	if got, err := List(ctx, "u1", 10); !errors.Is(err, ErrNotImplemented) || got != nil {
 		t.Fatalf("List got=%v err=%v, want nil and %v", got, err, ErrNotImplemented)
+	}
+}
+
+func TestNeo4jGraphStoreLinkEntityToMemoryValidation(t *testing.T) {
+	ctx := context.Background()
+	store := &Neo4jGraphStore{}
+
+	if err := store.LinkEntityToMemory(ctx, "", "e1", "m1", "MENTIONED_IN", nil); !errors.Is(err, ErrUserIDRequired) {
+		t.Fatalf("LinkEntityToMemory err=%v, want %v", err, ErrUserIDRequired)
+	}
+	if err := store.LinkEntityToMemory(ctx, "u1", "", "m1", "MENTIONED_IN", nil); !errors.Is(err, ErrEntityIDRequired) {
+		t.Fatalf("LinkEntityToMemory err=%v, want %v", err, ErrEntityIDRequired)
+	}
+	if err := store.LinkEntityToMemory(ctx, "u1", "e1", "", "MENTIONED_IN", nil); !errors.Is(err, memory.ErrMemoryIDRequired) {
+		t.Fatalf("LinkEntityToMemory err=%v, want %v", err, memory.ErrMemoryIDRequired)
+	}
+	if err := store.LinkEntityToMemory(ctx, "u1", "e1", "m1", "MENTIONED-IN", nil); !errors.Is(err, ErrRelationshipType) {
+		t.Fatalf("LinkEntityToMemory err=%v, want %v", err, ErrRelationshipType)
 	}
 }

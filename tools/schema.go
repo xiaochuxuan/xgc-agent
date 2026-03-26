@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -160,6 +161,120 @@ func GenerateFieldSchema(t reflect.Type) *Schema {
 	default:
 		// Default to any type
 		return &Schema{Type: "object"}
+	}
+}
+
+// ValidateArgs validates raw JSON args against the given input schema.
+// It checks required field presence and field type compatibility.
+func ValidateArgs(toolName string, args []byte, schema *Schema) error {
+	if schema == nil {
+		return nil
+	}
+
+	hasRequired := len(schema.Required) > 0
+
+	// reject empty or null args when schema has required fields
+	if len(args) == 0 || string(args) == "null" {
+		if hasRequired {
+			return fmt.Errorf("tool %s: empty args but required fields expected: %v", toolName, schema.Required)
+		}
+		return nil
+	}
+
+	if schema.Type != "object" || len(schema.Properties) == 0 {
+		return nil
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(args, &raw); err != nil {
+		return nil // let the main unmarshal handle parse errors
+	}
+
+	// check required fields
+	for _, field := range schema.Required {
+		if _, ok := raw[field]; !ok {
+			return fmt.Errorf("tool %s: missing required field %q", toolName, field)
+		}
+	}
+
+	// check field types against schema
+	for name, value := range raw {
+		propSchema, ok := schema.Properties[name]
+		if !ok || propSchema == nil {
+			continue
+		}
+		if err := checkJSONType(value, propSchema.Type); err != nil {
+			return fmt.Errorf("tool %s: field %q: %w", toolName, name, err)
+		}
+	}
+
+	return nil
+}
+
+// checkJSONType checks if a raw JSON value matches the expected schema type.
+func checkJSONType(raw json.RawMessage, expectedType string) error {
+	if len(raw) == 0 || expectedType == "" {
+		return nil
+	}
+
+	b := bytes.TrimSpace(raw)
+	if len(b) == 0 {
+		return nil
+	}
+
+	// null is acceptable for any type (represents optional/missing)
+	if string(b) == "null" {
+		return nil
+	}
+
+	first := b[0]
+
+	switch expectedType {
+	case "string":
+		if first != '"' {
+			return fmt.Errorf("expected string, got %s", jsonTokenDesc(first))
+		}
+	case "integer":
+		if first == '"' || first == '{' || first == '[' || first == 't' || first == 'f' {
+			return fmt.Errorf("expected integer, got %s", jsonTokenDesc(first))
+		}
+		if bytes.ContainsAny(b, ".eE") {
+			return fmt.Errorf("expected integer, got number with decimal")
+		}
+	case "number":
+		if first == '"' || first == '{' || first == '[' || first == 't' || first == 'f' {
+			return fmt.Errorf("expected number, got %s", jsonTokenDesc(first))
+		}
+	case "boolean":
+		if first != 't' && first != 'f' {
+			return fmt.Errorf("expected boolean, got %s", jsonTokenDesc(first))
+		}
+	case "array":
+		if first != '[' {
+			return fmt.Errorf("expected array, got %s", jsonTokenDesc(first))
+		}
+	case "object":
+		if first != '{' {
+			return fmt.Errorf("expected object, got %s", jsonTokenDesc(first))
+		}
+	}
+
+	return nil
+}
+
+// jsonTokenDesc returns a human-readable type name from a JSON token's first byte.
+func jsonTokenDesc(first byte) string {
+	switch first {
+	case '"':
+		return "string"
+	case '{':
+		return "object"
+	case '[':
+		return "array"
+	case 't', 'f':
+		return "boolean"
+	default:
+		return "number"
 	}
 }
 

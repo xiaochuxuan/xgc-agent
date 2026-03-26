@@ -33,10 +33,19 @@ type SemanticMemory interface {
 	SearchByTopic(ctx context.Context, topic string, limit int) ([]memory.MemoryItem, error)
 }
 
+// PerceptualMemory stores multimodal references (images/files/audio/video)
+// alongside textual descriptions for retrieval.
+type PerceptualMemory interface {
+	memory.BaseMemory
+	AddPerception(ctx context.Context, items ...memory.MemoryItem) error
+	ListByModality(ctx context.Context, modality string, limit int) ([]memory.MemoryItem, error)
+}
+
 // LongTermMemory is the composite container that holds episodic + semantic
 // sub-stores and exposes a unified search across both.
 type LongTermMemory interface {
 	memory.BaseMemory
 	Episodic() EpisodicMemory
 	Semantic() SemanticMemory
+	Perceptual() PerceptualMemory
 }

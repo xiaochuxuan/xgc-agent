@@ -60,6 +60,13 @@ func (m *ShortTermMemory) Add(ctx context.Context, items ...memory.MemoryItem) e
 
 	for _, item := range items {
 		it := item.Clone()
+		if it.Memory == nil {
+			it.Memory = &memory.Memory{}
+		}
+		if it.UserID == "" {
+			it.UserID = m.userID
+		}
+		it.SessionID = m.sessionID
 		if it.MemoryID == "" {
 			it.MemoryID = memory.GenerateMemoryID(it.Memory, it.UserID)
 		}
@@ -76,6 +83,7 @@ func (m *ShortTermMemory) Add(ctx context.Context, items ...memory.MemoryItem) e
 			if it.Memory.Metadata == nil {
 				it.Memory.Metadata = map[string]any{}
 			}
+			it.Memory.Metadata["user_id"] = it.UserID
 			it.Memory.Metadata["session_id"] = m.sessionID
 		}
 		if !m.order.Contains(it.MemoryID) {

@@ -202,7 +202,12 @@ func (s *InMemoryStore) List(ctx context.Context, userID string, limit int) ([]*
 	return out, nil
 }
 
-// TODO: to implement it
-func (s *InMemoryStore) Search(ctx context.Context, query string, limit int) ([]*memory.MemoryItem, error) {
+func (s *InMemoryStore) Search(ctx context.Context, userID string, queryEmbedding []float32, limit int) ([]*memory.MemoryItem, error) {
+	_ = ctx
+	_ = queryEmbedding
+	_ = limit
+	if userID == "" {
+		return nil, memory.ErrUserIDRequired
+	}
 	return nil, memory.ErrSearchNotSupported
 }

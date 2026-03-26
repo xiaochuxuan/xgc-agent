@@ -17,6 +17,7 @@ type GraphStore interface {
 	store.StoreManager
 	AddEntity(ctx context.Context, userID string, entityID string, name string, entityType string, properties map[string]any) error
 	AddRelationship(ctx context.Context, userID string, fromEntityID string, toEntityID string, relationshipType string, properties map[string]any) error
+	LinkEntityToMemory(ctx context.Context, userID string, entityID string, memoryID string, relationshipType string, properties map[string]any) error
 	FindRelatedEntities(ctx context.Context, userID string, entityID string, relationshipTypes []string, maxDepth int, limit int) ([]RelatedEntity, error)
 	SearchEntitiesByName(ctx context.Context, userID string, namePattern string, entityTypes []string, limit int) ([]Entity, error)
 	GetEntityRelationships(ctx context.Context, userID string, entityID string) ([]EntityRelationship, error)
@@ -65,34 +66,157 @@ type Neo4jGraphStore struct {
 	options neo4jOptions
 }
 
-func (s *Neo4jGraphStore) Add(ctx context.Context, userID string, content string, topics []string, metadata map[string]any) error {
-	//TODO implement me
-	panic("implement me")
+func Add(ctx context.Context, userID string, content string, topics []string, metadata map[string]any) error {
+	return ErrNotImplemented
+}
+
+func Get(ctx context.Context, userID string, memoryID string) (*memory.MemoryItem, error) {
+	return nil, ErrNotImplemented
+}
+
+func Update(ctx context.Context, userID string, memoryID string, content string, topic []string, metadata map[string]any) error {
+	return ErrNotImplemented
+}
+
+func Delete(ctx context.Context, userID string, memoryID string) error {
+	return ErrNotImplemented
+}
+
+func Clear(ctx context.Context, userID string) error {
+	return ErrNotImplemented
+}
+
+func List(ctx context.Context, userID string, limit int) ([]*memory.MemoryItem, error) {
+	return nil, ErrNotImplemented
+}
+
+func (s *Neo4jGraphStore) Add(ctx context.Context, item memory.MemoryItem) error {
+	if strings.TrimSpace(item.UserID) == "" {
+		return memory.ErrUserIDRequired
+	}
+	if item.Memory == nil {
+		return fmt.Errorf("memory: memory is required")
+	}
+	if strings.TrimSpace(item.MemoryID) == "" {
+		item.MemoryID = memory.GenerateMemoryID(item.Memory, item.UserID)
+	}
+	if item.CreatedAt.IsZero() {
+		item.CreatedAt = time.Now().UTC()
+	}
+	if item.UpdatedAt.IsZero() {
+		item.UpdatedAt = item.CreatedAt
+	}
+	props := memoryNodeProps(item)
+	query := "MERGE (m:Memory {id: $memory_id, user_id: $user_id}) " +
+		"ON CREATE SET m += $props " +
+		"ON MATCH SET m += $props, m.created_at = coalesce(m.created_at, $created_at)"
+	params := map[string]any{
+		"memory_id":  item.MemoryID,
+		"user_id":    item.UserID,
+		"created_at": item.CreatedAt.UTC(),
+		"props":      props,
+	}
+	return s.executeWrite(ctx, query, params, "failed to add memory")
 }
 
 func (s *Neo4jGraphStore) Get(ctx context.Context, userID string, memoryID string) (*memory.MemoryItem, error) {
-	//TODO implement me
-	panic("implement me")
+	if strings.TrimSpace(userID) == "" {
+		return nil, memory.ErrUserIDRequired
+	}
+	if strings.TrimSpace(memoryID) == "" {
+		return nil, memory.ErrMemoryIDRequired
+	}
+	query := "MATCH (m:Memory {id: $memory_id, user_id: $user_id}) RETURN m LIMIT 1"
+	params := map[string]any{"memory_id": memoryID, "user_id": userID}
+	item, err := s.readOneMemory(ctx, query, params)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil {
+		return nil, memory.ErrNotFound
+	}
+	return item, nil
 }
 
-func (s *Neo4jGraphStore) Update(ctx context.Context, userID string, memoryID string, content string, topic []string, metadata map[string]any) error {
-	//TODO implement me
-	panic("implement me")
+func (s *Neo4jGraphStore) Update(ctx context.Context, userID string, memoryID string, topic []string, content string, metadata map[string]any) error {
+	if strings.TrimSpace(userID) == "" {
+		return memory.ErrUserIDRequired
+	}
+	if strings.TrimSpace(memoryID) == "" {
+		return memory.ErrMemoryIDRequired
+	}
+	props := map[string]any{
+		"content":    content,
+		"topics":     normalizeTopics(topic),
+		"metadata":   normalizeMetadata(metadata),
+		"updated_at": time.Now().UTC(),
+	}
+	query := "MATCH (m:Memory {id: $memory_id, user_id: $user_id}) SET m += $props RETURN m"
+	params := map[string]any{"memory_id": memoryID, "user_id": userID, "props": props}
+	session := s.driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: s.options.database, AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		res, err := tx.Run(ctx, query, params)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := res.Single(ctx); err != nil {
+			if errorsIsNoRecord(err) {
+				return nil, memory.ErrNotFound
+			}
+			return nil, err
+		}
+		return nil, nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update memory: %w", err)
+	}
+	return nil
 }
 
 func (s *Neo4jGraphStore) Delete(ctx context.Context, userID string, memoryID string) error {
-	//TODO implement me
-	panic("implement me")
+	if strings.TrimSpace(userID) == "" {
+		return memory.ErrUserIDRequired
+	}
+	if strings.TrimSpace(memoryID) == "" {
+		return memory.ErrMemoryIDRequired
+	}
+	query := "MATCH (m:Memory {id: $memory_id, user_id: $user_id}) DETACH DELETE m"
+	params := map[string]any{"memory_id": memoryID, "user_id": userID}
+	return s.deleteByQuery(ctx, query, params, "failed to delete memory")
 }
 
 func (s *Neo4jGraphStore) Clear(ctx context.Context, userID string) error {
-	//TODO implement me
-	panic("implement me")
+	if strings.TrimSpace(userID) == "" {
+		return memory.ErrUserIDRequired
+	}
+	query := "MATCH (m:Memory {user_id: $user_id}) DETACH DELETE m"
+	params := map[string]any{"user_id": userID}
+	_, err := s.runWrite(ctx, query, params)
+	return err
 }
 
 func (s *Neo4jGraphStore) List(ctx context.Context, userID string, limit int) ([]*memory.MemoryItem, error) {
-	//TODO implement me
-	panic("implement me")
+	if strings.TrimSpace(userID) == "" {
+		return nil, memory.ErrUserIDRequired
+	}
+	query := "MATCH (m:Memory {user_id: $user_id}) RETURN m ORDER BY m.updated_at DESC, m.created_at DESC"
+	params := map[string]any{"user_id": userID}
+	if limit > 0 {
+		query += " LIMIT $limit"
+		params["limit"] = limit
+	}
+	return s.readManyMemories(ctx, query, params)
+}
+
+func (s *Neo4jGraphStore) Search(ctx context.Context, userID string, queryEmbedding []float32, limit int) ([]*memory.MemoryItem, error) {
+	_ = ctx
+	_ = queryEmbedding
+	_ = limit
+	if strings.TrimSpace(userID) == "" {
+		return nil, memory.ErrUserIDRequired
+	}
+	return nil, memory.ErrSearchNotSupported
 }
 
 // NewNeo4jGraphStore creates a new Neo4j graph store.
@@ -294,6 +418,53 @@ func (s *Neo4jGraphStore) AddRelationship(ctx context.Context, userID string,
 	}
 
 	return err
+}
+
+// LinkEntityToMemory links an entity to a memory node with a relationship.
+func (s *Neo4jGraphStore) LinkEntityToMemory(ctx context.Context, userID string, entityID string, memoryID string, relationshipType string, properties map[string]any) error {
+	if err := checkEntity(userID, entityID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(memoryID) == "" {
+		return memory.ErrMemoryIDRequired
+	}
+	if !validRelationshipType(relationshipType) {
+		return ErrRelationshipType
+	}
+	props := map[string]any{}
+	for k, v := range properties {
+		props[k] = v
+	}
+	now := time.Now().UTC()
+	props["type"] = relationshipType
+	props["updated_at"] = now
+	if _, ok := props["created_at"]; !ok {
+		props["created_at"] = now
+	}
+	query := fmt.Sprintf(
+		"MATCH (e:Entity {id: $entity_id, user_id: $user_id}) "+
+			"MATCH (m:Memory {id: $memory_id, user_id: $user_id}) "+
+			"MERGE (e)-[r:%s]->(m) SET r += $props RETURN r",
+		relationshipType,
+	)
+	params := map[string]any{"entity_id": entityID, "memory_id": memoryID, "user_id": userID, "props": props}
+	session := s.driver.NewSession(ctx, neo4j.SessionConfig{
+		DatabaseName: s.options.database,
+		AccessMode:   neo4j.AccessModeWrite,
+	})
+	defer session.Close(ctx)
+	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		result, err := tx.Run(ctx, query, params)
+		if err != nil {
+			return nil, err
+		}
+		_, err = result.Single(ctx)
+		return nil, err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to link entity to memory: %w", err)
+	}
+	return nil
 }
 
 // FindRelatedEntities returns related entities for a given entity.
@@ -678,4 +849,240 @@ func checkEntity(userID string, entityID string) error {
 		return ErrEntityIDRequired
 	}
 	return nil
+}
+
+func memoryNodeProps(item memory.MemoryItem) map[string]any {
+	props := map[string]any{
+		"id":          item.MemoryID,
+		"user_id":     item.UserID,
+		"memory_type": string(item.Type),
+		"created_at":  item.CreatedAt.UTC(),
+		"updated_at":  item.UpdatedAt.UTC(),
+	}
+	if item.Memory != nil {
+		props["content"] = item.Memory.Content
+		props["topics"] = normalizeTopics(item.Memory.Topics)
+		props["metadata"] = normalizeMetadata(item.Memory.Metadata)
+	}
+	if item.SessionID != "" {
+		props["session_id"] = item.SessionID
+	}
+	if item.ExpiresAt != nil {
+		props["expires_at"] = item.ExpiresAt.UTC()
+	}
+	if len(item.Embedding) > 0 {
+		props["embedding"] = item.Embedding
+	}
+	if item.Score != 0 {
+		props["score"] = item.Score
+	}
+	if item.Confidence != 0 {
+		props["confidence"] = item.Confidence
+	}
+	return props
+}
+
+func normalizeTopics(topics []string) []string {
+	if topics == nil {
+		return []string{}
+	}
+	return topics
+}
+
+func normalizeMetadata(metadata map[string]any) map[string]any {
+	if metadata == nil {
+		return map[string]any{}
+	}
+	clone := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		clone[k] = v
+	}
+	return clone
+}
+
+func (s *Neo4jGraphStore) executeWrite(ctx context.Context, query string, params map[string]any, message string) error {
+	_, err := s.runWrite(ctx, query, params)
+	if err != nil {
+		return fmt.Errorf("%s: %w", message, err)
+	}
+	return nil
+}
+
+func (s *Neo4jGraphStore) runWrite(ctx context.Context, query string, params map[string]any) (neo4j.ResultSummary, error) {
+	if s == nil || s.driver == nil {
+		return nil, ErrNotImplemented
+	}
+	session := s.driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: s.options.database, AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+	result, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		res, err := tx.Run(ctx, query, params)
+		if err != nil {
+			return nil, err
+		}
+		return res.Consume(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	return result.(neo4j.ResultSummary), nil
+}
+
+func (s *Neo4jGraphStore) readOneMemory(ctx context.Context, query string, params map[string]any) (*memory.MemoryItem, error) {
+	items, err := s.readManyMemories(ctx, query, params)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	return items[0], nil
+}
+
+func (s *Neo4jGraphStore) readManyMemories(ctx context.Context, query string, params map[string]any) ([]*memory.MemoryItem, error) {
+	if s == nil || s.driver == nil {
+		return nil, ErrNotImplemented
+	}
+	session := s.driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: s.options.database, AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		res, err := tx.Run(ctx, query, params)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]*memory.MemoryItem, 0)
+		for res.Next(ctx) {
+			record := res.Record()
+			val, _ := record.Get("m")
+			node, ok := val.(neo4j.Node)
+			if !ok {
+				return nil, fmt.Errorf("unexpected memory node type")
+			}
+			item := memoryItemFromNode(node)
+			out = append(out, &item)
+		}
+		if err := res.Err(); err != nil {
+			return nil, err
+		}
+		return out, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return []*memory.MemoryItem{}, nil
+	}
+	return result.([]*memory.MemoryItem), nil
+}
+
+func (s *Neo4jGraphStore) deleteByQuery(ctx context.Context, query string, params map[string]any, message string) error {
+	summary, err := s.runWrite(ctx, query, params)
+	if err != nil {
+		return fmt.Errorf("%s: %w", message, err)
+	}
+	if summary != nil && summary.Counters().NodesDeleted() == 0 {
+		return memory.ErrNotFound
+	}
+	return nil
+}
+
+func memoryItemFromNode(node neo4j.Node) memory.MemoryItem {
+	props := node.Props
+	item := memory.MemoryItem{
+		MemoryID:   stringProp(props, "id"),
+		UserID:     stringProp(props, "user_id"),
+		SessionID:  stringProp(props, "session_id"),
+		Type:       memory.MemoryType(stringProp(props, "memory_type")),
+		CreatedAt:  timeProp(props, "created_at"),
+		UpdatedAt:  timeProp(props, "updated_at"),
+		Embedding:  float32SliceProp(props, "embedding"),
+		Score:      float64Prop(props, "score"),
+		Confidence: float64Prop(props, "confidence"),
+		Memory: &memory.Memory{
+			Content:  stringProp(props, "content"),
+			Topics:   stringSliceProp(props, "topics"),
+			Metadata: mapProp(props, "metadata"),
+		},
+	}
+	if expiresAt, ok := timePtrProp(props, "expires_at"); ok {
+		item.ExpiresAt = expiresAt
+	}
+	return item
+}
+
+func stringProp(props map[string]any, key string) string {
+	if v, ok := props[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func stringSliceProp(props map[string]any, key string) []string {
+	return toStringSlice(props[key])
+}
+
+func mapProp(props map[string]any, key string) map[string]any {
+	if v, ok := props[key].(map[string]any); ok {
+		return normalizeMetadata(v)
+	}
+	return map[string]any{}
+}
+
+func float64Prop(props map[string]any, key string) float64 {
+	switch v := props[key].(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case int:
+		return float64(v)
+	default:
+		return 0
+	}
+}
+
+func float32SliceProp(props map[string]any, key string) []float32 {
+	if raw, ok := props[key].([]float32); ok {
+		return raw
+	}
+	if raw, ok := props[key].([]any); ok {
+		out := make([]float32, 0, len(raw))
+		for _, v := range raw {
+			switch n := v.(type) {
+			case float32:
+				out = append(out, n)
+			case float64:
+				out = append(out, float32(n))
+			case int:
+				out = append(out, float32(n))
+			case int64:
+				out = append(out, float32(n))
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+func timeProp(props map[string]any, key string) time.Time {
+	if t, ok := props[key].(time.Time); ok {
+		return t
+	}
+	return time.Time{}
+}
+
+func timePtrProp(props map[string]any, key string) (*time.Time, bool) {
+	if t, ok := props[key].(time.Time); ok {
+		value := t
+		return &value, true
+	}
+	return nil, false
+}
+
+func errorsIsNoRecord(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "record not found")
 }

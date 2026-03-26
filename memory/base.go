@@ -12,6 +12,8 @@ const (
 	MemoryEpisodic MemoryType = "episodic"
 	// MemorySemantic is for distilled knowledge / facts (long-term).
 	MemorySemantic MemoryType = "semantic"
+	// MemoryPerceptual is for long-term multimodal references (image/file/audio/video).
+	MemoryPerceptual MemoryType = "perceptual"
 )
 
 type MemoryType string

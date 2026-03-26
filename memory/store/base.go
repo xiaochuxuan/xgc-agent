@@ -21,4 +21,7 @@ type StoreManager interface {
 	// List returns messages in chronological order (oldest -> newest).
 	// If limit <= 0, it returns all messages.
 	List(ctx context.Context, userID string, limit int) ([]*memory.MemoryItem, error)
+	// Search performs vector similarity retrieval for a user's memories.
+	// If limit <= 0, implementations may return all matched items.
+	Search(ctx context.Context, userID string, queryEmbedding []float32, limit int) ([]*memory.MemoryItem, error)
 }

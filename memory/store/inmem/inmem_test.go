@@ -132,7 +132,7 @@ func TestInMemoryStore_CRUDListAndSearch(t *testing.T) {
 		t.Fatalf("List empty user err=%v, want ErrInvalidID", err)
 	}
 
-	if _, err := s.Search(ctx, "q", 10); !errors.Is(err, memory.ErrSearchNotSupported) {
+	if _, err := s.Search(ctx, user, []float32{0.1, 0.2, 0.3}, 10); !errors.Is(err, memory.ErrSearchNotSupported) {
 		t.Fatalf("Search err=%v, want ErrSearchNotSupported", err)
 	}
 }
